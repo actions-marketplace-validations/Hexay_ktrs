@@ -1,4 +1,4 @@
-"ktrs' ktfmt and ktlint binaries under aspect rules_lint (README: Integrations, Bazel)."
+"ktrs' ktfmt and ktlint binaries under aspect rules_lint (docs/ci-integrations.md)."
 
 module(name = "ktrs_e2e_rules_lint")
 

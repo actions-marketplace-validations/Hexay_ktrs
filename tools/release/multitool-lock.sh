@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Prints a rules_multitool lockfile (tools `ktrs`, `ktfmt`, `ktlint`) for a release, from its SHA256SUMS; attached to
-# the release as ktrs-<tag>.multitool.lock.json (README "Bazel"). Run by the release workflow:
+# the release as ktrs-<tag>.multitool.lock.json (docs/ci-integrations.md). Run by the release workflow:
 #   tools/release/multitool-lock.sh v0.5.1 SHA256SUMS > ktrs-v0.5.1.multitool.lock.json
 set -euo pipefail
 here="$(cd "$(dirname "$0")" && pwd)"

@@ -328,7 +328,7 @@ jobs:
           gh release create "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" --generate-notes \
             ktrs-*.tar.gz ktrs-*.zip ktrs-*.jar ktrs-*.vsix SHA256SUMS "ktrs-$GITHUB_REF_NAME.multitool.lock.json"
 
-  # The rules_lint recipes of the README's Bazel section against the published lockfile: real downloads and checksums.
+  # The rules_lint recipes of docs/ci-integrations.md against the published lockfile: real downloads and checksums.
   bazel:
     needs: release
     runs-on: ubuntu-24.04

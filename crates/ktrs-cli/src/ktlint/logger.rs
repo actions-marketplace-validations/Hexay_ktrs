@@ -135,17 +135,20 @@ fn local_clock() -> (u16, u16, u16, u16) {
 
 #[cfg(all(unix, target_pointer_width = "64"))]
 fn local_clock() -> (u16, u16, u16, u16) {
+    // `struct tm` starts with tm_sec, tm_min, tm_hour (ints); 64 bytes covers glibc/musl/macOS layouts.
+    // Aligned for its trailing long and pointer fields.
+    #[repr(C, align(8))]
+    struct Tm([i32; 16]);
     unsafe extern "C" {
-        fn localtime_r(time: *const i64, tm: *mut [i32; 16]) -> *mut [i32; 16];
+        fn localtime_r(time: *const i64, tm: *mut Tm) -> *mut Tm;
     }
     let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
     let secs = now.as_secs() as i64;
-    // `struct tm` starts with tm_sec, tm_min, tm_hour (ints); 64 bytes covers glibc/musl/macOS layouts.
-    let mut tm = [0i32; 16];
+    let mut tm = Tm([0; 16]);
     // SAFETY: time_t is i64 on 64-bit unix; localtime_r writes at most sizeof(struct tm) <= 64 bytes.
     let ok = unsafe { !localtime_r(&secs, &mut tm).is_null() };
     if ok {
-        (tm[2] as u16, tm[1] as u16, tm[0] as u16, now.subsec_millis() as u16)
+        (tm.0[2] as u16, tm.0[1] as u16, tm.0[0] as u16, now.subsec_millis() as u16)
     } else {
         utc_clock(now)
     }

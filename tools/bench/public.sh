@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Reproducible benchmark: ktrs's `ktfmt`/`ktlint` binaries vs the pinned upstream jars, timed by hyperfine on the
+# Reproducible benchmark: ktrs's `ktfmt`/`ktlint` binaries vs the pinned upstream jars and native images, timed by hyperfine on the
 # public corpus pinned in tools/bench/REVISIONS. Linux and macOS (bash 3.2+). What it measures and how the numbers
 # relate to the README: research/23-public-bench.md.
 #
@@ -23,6 +23,21 @@ ktlint_sha256() {
     *) die "no pinned sha256 for ktlint $1 (add it to ktlint_sha256)" ;;
   esac
 }
+# GraalVM native images published upstream; empty on platforms with no pin (then only the jars run).
+KTLINT_NATIVE_VERSION=2.0.0-ALPHA-4
+case "$(uname -sm)" in
+  "Linux x86_64")
+    KTFMT_NATIVE_ASSET=ktfmt-linux-x86_64-$KTFMT_VERSION
+    KTFMT_NATIVE_SHA256=3684327b092db9b76fffcb9525decf73f8331ed17e00ce3232769c11cd36d352
+    KTLINT_NATIVE_ASSET=ktlint_linux-x86-64
+    KTLINT_NATIVE_SHA256=5775542be982b9c795750c7809ab7c291e3d946eab5214bd3c475bf497fe0073 ;;
+  "Darwin arm64")
+    KTFMT_NATIVE_ASSET=ktfmt-macos-aarch64-$KTFMT_VERSION
+    KTFMT_NATIVE_SHA256=d10ec46dadc4ae19e5b8ddc72d10ce45e5be35d632ce9e73c9b8a59d2147fb85
+    KTLINT_NATIVE_ASSET=ktlint_darwin-arm64
+    KTLINT_NATIVE_SHA256=c749d8d6b081288c68b0e8427c6f977a4fd06bf45d1cc68d330cc31262a57556 ;;
+  *) KTFMT_NATIVE_ASSET= KTLINT_NATIVE_ASSET= ;;
+esac
 
 FMT_ALL="fmt-stdin fmt-precommit fmt-check-okhttp fmt-okhttp fmt-okhttp-1core fmt-corpus"
 LINT_ALL="lint-stdin lint-file lint-okhttp lint-okhttp-1core lint-corpus format-okhttp format-corpus"
@@ -83,6 +98,20 @@ if want_any "$LINT_ALL"; then
     fetch_pinned "$CACHE/jars/ktlint-$v" "https://github.com/pinterest/ktlint/releases/download/$v/ktlint" "$sha"
   done
 fi
+KTFMT_NATIVE= KTLINT_NATIVE=
+if [[ -n $KTFMT_NATIVE_ASSET ]]; then
+  if want_any "$FMT_ALL"; then
+    fetch_pinned "$CACHE/jars/$KTFMT_NATIVE_ASSET.tar.gz" \
+      "https://github.com/Kotlin/ktfmt/releases/download/v$KTFMT_VERSION/$KTFMT_NATIVE_ASSET.tar.gz" "$KTFMT_NATIVE_SHA256"
+    tar -xzf "$CACHE/jars/$KTFMT_NATIVE_ASSET.tar.gz" -C "$CACHE/jars"
+    KTFMT_NATIVE=$CACHE/jars/$KTFMT_NATIVE_ASSET/ktfmt
+  fi
+  if want_any "$LINT_ALL"; then
+    KTLINT_NATIVE=$CACHE/jars/$KTLINT_NATIVE_ASSET-$KTLINT_NATIVE_VERSION
+    fetch_pinned "$KTLINT_NATIVE" \
+      "https://github.com/pinterest/ktlint/releases/download/$KTLINT_NATIVE_VERSION/$KTLINT_NATIVE_ASSET" "$KTLINT_NATIVE_SHA256"
+  fi
+fi
 
 if [[ -z ${CORPUS:-} ]]; then
   "$root/tools/holdout/fetch.sh" "$CACHE/corpus" "$here/REVISIONS" >&2
@@ -96,12 +125,22 @@ editor_file=$(find "$okhttp" -name '*.kt' -size +8k -size -16k | LC_ALL=C sort |
 one_dir=$okhttp/okhttp/src/commonJvmAndroid/kotlin/okhttp3
 [[ -f $editor_file && -f $one_dir/Credentials.kt ]] || die "$okhttp is not the pinned okhttp"
 
+# Gotcha: a crash exits 1 like "lint errors found", and --ignore-failure would then time the crash as a fast run.
+if [[ -n $KTLINT_NATIVE ]]; then
+  probe=$(cd "$one_dir" && "$KTLINT_NATIVE" --relative Credentials.kt 2>&1 || true)
+  if [[ $probe == *"Exception in thread"* ]]; then
+    echo "ktlint native image crashes on this platform: not benchmarked (research/37)" >&2
+    KTLINT_NATIVE= KTLINT_NATIVE_ASSET=
+  fi
+fi
+
 W=$(mktemp -d); trap 'rm -rf "$W"' EXIT
 T=$W/tree
 
 {
   echo "- $(uname -sm), $(getconf _NPROCESSORS_ONLN) CPUs; $(java -version 2>&1 | head -1); $("$HYPERFINE" --version)"
-  echo "- $("$KTRS_BIN/ktrs" --version 2>&1 | head -1) ($KTRS_BIN); ktfmt $KTFMT_VERSION jar; ktlint jars: $KTLINTS"
+  echo "- $("$KTRS_BIN/ktrs" --version 2>&1 | head -1) ($KTRS_BIN); ktfmt $KTFMT_VERSION jar; ktlint jars: $KTLINTS;" \
+    "native images: ${KTFMT_NATIVE_ASSET:-none} ${KTLINT_NATIVE_ASSET:+$KTLINT_NATIVE_ASSET $KTLINT_NATIVE_VERSION}"
   echo "- corpus $(kotlin_files "$CORPUS" | wc -l | tr -d ' ') files, okhttp $(kotlin_files "$okhttp" | wc -l | tr -d ' ');" \
     "editor file ${editor_file#"$CORPUS"/} ($(wc -c < "$editor_file" | tr -d ' ') bytes)"
   echo "- hyperfine: $WARMUP warm-up, $RUNS runs per command; commands run one after another, not interleaved"
@@ -127,30 +166,35 @@ copy_to_tree() { echo "rm -rf $(q "$T") && cp -R $(q "$1") $(q "$T") && cp $(q "
 pin1() { echo "taskset -c $ONE_CPU"; }
 
 KTFMT=$(q "$KTRS_BIN/ktfmt") JAR="java -jar $(q "$KTFMT_JAR")" JN="ktfmt $KTFMT_VERSION"
+# fmt_bench id label args [pin]: ktrs, then the jar, then the native image if there is one for this platform.
+fmt_bench() {
+  local id=$1 label=$2 args=$3 pre=${4:+$4 }
+  local cmds=("$pre$KTFMT $args" "$JN=$pre$JAR $args")
+  [[ -n $KTFMT_NATIVE ]] && cmds+=("$JN native=$pre$(q "$KTFMT_NATIVE") $args")
+  bench "$id" "$label" "${cmds[@]}"
+}
 precommit=""
 for f in $(kotlin_files "$okhttp" | awk 'NR <= 10'); do precommit+=" $(q "$T/${f#"$okhttp"/}")"; done
 okhttp_n=$(kotlin_files "$okhttp" | wc -l | tr -d ' ') corpus_n=$(kotlin_files "$CORPUS" | wc -l | tr -d ' ')
 
-bench fmt-stdin "ktfmt: editor, one $(($(wc -c < "$editor_file") / 1000)) KB file on stdin" \
-  "$KTFMT - < $(q "$editor_file")" "$JN=$JAR - < $(q "$editor_file")"
+fmt_bench fmt-stdin "ktfmt: editor, one $(($(wc -c < "$editor_file") / 1000)) KB file on stdin" "- < $(q "$editor_file")"
 HOPTS=(--setup "$(copy_to_tree "$okhttp")")
-bench fmt-precommit "ktfmt: pre-commit, 10 files" "$KTFMT --quiet$precommit" "$JN=$JAR --quiet$precommit"
+fmt_bench fmt-precommit "ktfmt: pre-commit, 10 files" "--quiet$precommit"
 HOPTS=(--setup "$(copy_to_tree "$okhttp")")
-bench fmt-check-okhttp "ktfmt: CI check on okhttp ($okhttp_n files, -n --set-exit-if-changed)" \
-  "$KTFMT -n --set-exit-if-changed $(q "$T")" "$JN=$JAR -n --set-exit-if-changed $(q "$T")"
+fmt_bench fmt-check-okhttp "ktfmt: CI check on okhttp ($okhttp_n files, -n --set-exit-if-changed)" "-n --set-exit-if-changed $(q "$T")"
 HOPTS=(--setup "$(copy_to_tree "$okhttp")")
-bench fmt-okhttp "ktfmt: format okhttp in place" "$KTFMT --quiet $(q "$T")" "$JN=$JAR --quiet $(q "$T")"
+fmt_bench fmt-okhttp "ktfmt: format okhttp in place" "--quiet $(q "$T")"
 HOPTS=(--setup "$(copy_to_tree "$okhttp")")
-bench fmt-okhttp-1core "ktfmt: format okhttp in place, 1 core" \
-  "$(pin1) $KTFMT --quiet $(q "$T")" "$JN=$(pin1) $JAR --quiet $(q "$T")"
+fmt_bench fmt-okhttp-1core "ktfmt: format okhttp in place, 1 core" "--quiet $(q "$T")" "$(pin1)"
 HOPTS=(--setup "$(copy_to_tree "$CORPUS")")
-bench fmt-corpus "ktfmt: format the corpus in place ($corpus_n files)" "$KTFMT --quiet $(q "$T")" "$JN=$JAR --quiet $(q "$T")"
+fmt_bench fmt-corpus "ktfmt: format the corpus in place ($corpus_n files)" "--quiet $(q "$T")"
 
 # ktlint: cwd = the project and --relative, as in tools/bench/lint-e2e.sh. $1 = what follows `cd DIR &&`.
 ktlint_cmds() { # dir args [pin]
   local v pre="cd $(q "$1") && ${3:+$3 }"
   echo "$pre$(q "$KTRS_BIN/ktlint") $2"
   for v in $KTLINTS; do echo "ktlint $v=$pre$(q "$CACHE/jars/ktlint-$v") $2"; done
+  [[ -z $KTLINT_NATIVE ]] || echo "ktlint $KTLINT_NATIVE_VERSION native=$pre$(q "$KTLINT_NATIVE") $2"
 }
 lint_bench() { # id label dir args [pin]
   local id=$1 label=$2 lines=() line
