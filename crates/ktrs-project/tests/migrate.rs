@@ -168,10 +168,10 @@ fn migrated_and_unrelated_builds_are_left_alone() {
     }
 }
 
-/// What migration adds is what README "Integrations" tells users to write.
+/// What migration adds is what docs/build-tools.md tells users to write.
 #[test]
-fn added_lines_match_the_readme() {
-    let readme = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../README.md")).unwrap();
+fn added_lines_match_the_docs() {
+    let readme = std::fs::read_to_string(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/build-tools.md")).unwrap();
     let marker = "id(\"io.github.hexay.ktrs\") version \"";
     let start = readme.find(marker).expect("README ktfmt-gradle snippet") + marker.len();
     let version = &readme[start..start + readme[start..].find('"').unwrap()];

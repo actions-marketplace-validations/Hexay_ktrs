@@ -1,5 +1,5 @@
 //! Spotless's Gradle `ktfmt()` / `ktlint()` steps -> `addStep(KtrsStep..)` / `addStep(KtrsKtlintStep..)`, plus
-//! the `io.github.hexay:ktrs` classpath entry (README "Integrations > Gradle", Spotless).
+//! the `io.github.hexay:ktrs` classpath entry (docs/build-tools.md).
 
 use super::Notes;
 use super::VERSIONS_2_0_AND_1_8;

@@ -1,4 +1,34 @@
-# Bazel, reviewdog and Danger
+# CI integrations
+
+## GitHub Actions
+
+The basic setup is in the [README](../README.md#github-actions).
+
+`sarif: true` also uploads the lint findings to GitHub code scanning, so they show up in the Security tab and
+stay tracked across commits, without the annotation limit. The job needs `permissions: { contents: read,
+security-events: write }`, and private repositories need GitHub Code Security:
+
+```yaml
+- uses: Hexay/ktrs@v0.5.3
+  with:
+    check: lint
+    sarif: true                    # sarif-category: <name> keeps several uploads apart
+```
+
+`changed-only` compares with the pull request's base commit. On a push it compares with the commit
+before the push, or with the default branch for a new branch or a force push; `base: <ref>` overrides
+this. Without `check`, the action only installs the binaries, and you run them yourself:
+
+```yaml
+- uses: Hexay/ktrs@v0.5.3
+- run: ktrs fmt --check --style kotlinlang
+- run: ktrs lint --reporter github --changed-since origin/main
+```
+
+`--changed-since <ref>` (`ktrs fmt` and `ktrs lint`) keeps the files that differ from the merge base
+of `<ref>` and `HEAD`, including uncommitted and untracked ones. `--reporter github` (`ktrs lint` and
+`ktrs fmt --check`) prints the findings as annotations. GitHub shows at most 10 annotations per step;
+the job log has all of them.
 
 ## Bazel
 

@@ -1,6 +1,6 @@
-//! `ktrs migrate`: switches a build's ktfmt / ktlint setup to the ktrs drop-ins, mirroring README
-//! "Integrations" (the swaps are listed in `coords.rs`). Edits are textual and in place: ids, coordinates and
-//! version tokens are replaced, and the few lines the README adds (Spotless classpath and Maven dependency)
+//! `ktrs migrate`: switches a build's ktfmt / ktlint setup to the ktrs drop-ins, mirroring
+//! docs/build-tools.md (the swaps are listed in `coords.rs`). Edits are textual and in place: ids, coordinates and
+//! version tokens are replaced, and the few lines the docs add (Spotless classpath and Maven dependency)
 //! are inserted with the surrounding indentation. Anything that can't be rewritten without
 //! guessing (versions from expressions, ktlint or ktfmt run from its jar, Spotless options with no ktrs
 //! equivalent) becomes a note instead. Already migrated parts are left alone, so a second run is a no-op.
@@ -21,7 +21,7 @@ use std::path::{Path, PathBuf};
 
 use crate::layout::{self, Layout};
 use crate::reader::display;
-use coords::{README_DROP_IN, README_GRADLE, README_MAVEN};
+use coords::{DOCS_GRADLE, DOCS_MAVEN, README_DROP_IN};
 use edits::Edits;
 
 /// The ktlint versions the drop-ins run.
@@ -32,7 +32,7 @@ pub struct Migration {
     /// The build root (as in [`crate::ProjectConfig::root`]).
     pub root: PathBuf,
     pub changes: Vec<FileChange>,
-    /// `<file relative to root>: <what to do by hand>; see README ...`.
+    /// `<file relative to root>: <what to do by hand>; see <docs> ...`.
     pub notes: Vec<String>,
 }
 
@@ -149,11 +149,11 @@ impl Notes {
     }
 
     pub(crate) fn gradle(&mut self, msg: String) {
-        self.add(msg, README_GRADLE);
+        self.add(msg, DOCS_GRADLE);
     }
 
     pub(crate) fn maven(&mut self, msg: String) {
-        self.add(msg, README_MAVEN);
+        self.add(msg, DOCS_MAVEN);
     }
 
     pub(crate) fn drop_in(&mut self, msg: String) {

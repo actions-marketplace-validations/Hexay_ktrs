@@ -39,6 +39,23 @@ each time, so later iterations do the full work.
 So cold start and JIT account for most of ktfmt's gap (25x cold, 4x warm) but little of ktlint's (37x cold, 25x
 warm). Warm ktfmt in a long-lived process is the competitor worth watching, as the Spotless warm-daemon row shows.
 
+## PGO: three failed attempts (2026-10-30)
+
+Oracle GraalVM 25.0.4 on a devbox session capped at ~8 GB. No working binary, so no numbers. The build script was deleted;
+what it learned, in order:
+
+- ktlint: `native-image -jar` on the release misses `META-INF/services` (SLF4J provider, `ClassCastException` on NOPLogger)
+  because the release is a shell script + jar. Strip the prefix first.
+- ktlint: the agent (`-agentlib:native-image-agent=config-merge-dir=`) on okhttp fixes `theUnsafe`. `-H:+AddAllCharsets`
+  fixes `UnsupportedCharsetException: UTF-32BE`. Then `MissingReflectionRegistrationError` on the
+  `KtTypeConstraintList` constructor: okhttp doesn't exercise every PSI class. Next step: trace the agent over the whole
+  corpus, or register the PSI classes.
+- ktfmt: `./gradlew :ktfmt:nativeCompile` (project `:ktfmt`, dir `core`). `-O3` under Oracle GraalVM spends 59% of the build
+  in GC at 6.5 GB, then fails with a 300 s per-method bailout on `ManyItemMap.add`. With `-O2` it hit a 40 minute limit.
+  It needs a bigger machine.
+
+Output checks matter: ktlint exits 1 on findings and on crashes alike, so compare output with the jar's.
+
 ## Gotchas
 
 - hyperfine's RSS is a high-water mark across a call (`getrusage(RUSAGE_CHILDREN)`), so anything after the jar reads
