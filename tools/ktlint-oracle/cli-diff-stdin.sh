@@ -1,5 +1,5 @@
 # Sourced by cli-diff.sh: stdin scenarios, then the exact invocations of editor integrations (docs/editors.md) and
-# of CI integrations (README).
+# of CI integrations (docs/ci-integrations.md).
 
 scenario stdin stdin.kt "" --stdin
 scenario stdin_format stdin.kt "" --stdin -F
@@ -56,7 +56,7 @@ scenario ed_vscode src/A.kt "" --stdin -F --log-level none --stdin-path src/A.kt
 scenario ed_vscode_bad src/Bad.kt "" --stdin -F --log-level none --stdin-path src/Bad.kt
 scenario ed_vscode_ec ec/sub/E.kt "" --stdin -F --stdin-path ec/sub/E.kt --log-level=none
 
-# CI integrations (README "Bazel", "reviewdog and Danger"). danger-ktlint 0.0.9 (the PR's .kt files come first):
+# CI integrations (docs/ci-integrations.md). danger-ktlint 0.0.9 (the PR's .kt files come first):
 scenario ci_danger "" "" src/A.kt src/sub/B.kt --reporter=json --relative --log-level=none
 scenario ci_danger_clean "" "" src/sub/CTest.kt --reporter=json --relative --log-level=none
 scenario ci_danger_bad "" "" src/A.kt src/Bad.kt --reporter=json --relative --log-level=none

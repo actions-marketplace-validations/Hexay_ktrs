@@ -1,5 +1,5 @@
 name: ktrs Kotlin formatter and linter
-description: Kotlin formatting and linting identical to ktfmt and ktlint, 13-190x faster, no JVM
+description: Kotlin formatting and linting identical to ktfmt and ktlint, 10-200x faster than the jars, no JVM
 branding:
   icon: check-square
   color: purple

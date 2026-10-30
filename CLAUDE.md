@@ -83,7 +83,8 @@ Milestone 1: the parser's tree must be identical to the Kotlin compiler's PSI (`
   Input convention: CRLF->LF and trailing newlines stripped (matches upstream's test framework).
 - `tools/fetch-corpus.sh` — real-world repos at the pins in `tools/corpus/REVISIONS` into `corpus/` (gitignored).
 - `tools/bench/public.sh` — the README's benchmark (hyperfine vs sha256-pinned jars, pins `tools/bench/REVISIONS`;
-  CI: `.github/workflows/bench.yml`); research/23.
+  CI: `.github/workflows/bench.yml`); research/23. `tools/bench/jvm-warm.sh`, `spotless.py`; numbers and method
+  `docs/performance.md`, native images research/37.
 - `fuzz/` (own workspace, nightly + cargo-fuzz, Linux) and `tools/fuzz/{fuzz,diff}.sh` — fuzzing and the differential
   runner vs the jars; findings and status research/24.
 

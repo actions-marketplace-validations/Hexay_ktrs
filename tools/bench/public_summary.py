@@ -27,9 +27,10 @@ def main(out):
         sid, label = line.split("\t", 1)
         results = json.loads((out / f"{sid}.json").read_text())["results"]
         ours = results[0]["median"]
-        for r in results:
+        for i, r in enumerate(results):
             rss = r.get("memory_usage_byte")
-            rss = f"{statistics.median(rss) / 1e6:.0f} MB" if rss else "—"
+            # hyperfine's RSS is a high-water mark over the call, so a command after the jar just repeats the jar's.
+            rss = f"{statistics.median(rss) / 1e6:.0f} MB" if rss and i < 2 else "—"
             speedup = "" if r is results[0] else f"**{r['median'] / ours:.1f}x**"
             stddev = fmt_time(r["stddev"]) if r.get("stddev") is not None else "—"
             print(f"| {label} | {r['command']} | {fmt_time(r['median'])} | {stddev} "

@@ -13,7 +13,7 @@ tools/bench/public.sh --only quick --ktlint 2.0.0-ALPHA-4   # what CI runs by de
 tools/bench/public.sh --list                       # scenario ids and groups (all, quick, fmt, lint)
 ```
 
-Needs bash (3.2 is enough), git, curl, java (21 for the numbers below), hyperfine (1.19+ for max RSS), python3.
+Needs bash (3.2 is enough), git, curl, java (21 for the numbers below), hyperfine (1.20+: 1.19 records no max RSS), python3.
 `--runs N` (default 5), `--warmup N` (1), `--out DIR` (`target/bench/public`). `ONE_CPU` picks the CPU for the 1-core
 scenarios, which need `taskset` and are skipped on macOS.
 

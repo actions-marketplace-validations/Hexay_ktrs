@@ -9,28 +9,27 @@
 [![License](https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-blue.svg)](#license)
 [![Playground](https://img.shields.io/badge/try%20it-playground-7f52ff.svg)](https://hexay.github.io/ktrs/)
 
-<img src="assets/benchmark.svg" alt="Format okhttp: ktrs 0.18 s vs ktfmt 3.30 s. Lint okhttp: ktrs 0.34 s vs ktlint 11.56 s." width="720">
+<img src="assets/benchmark.svg" alt="Format okhttp: ktrs 0.07 s, ktfmt GraalVM native image 1.13 s, ktfmt jar 1.74 s. Lint okhttp: ktrs 0.12 s, ktlint jar 4.41 s." width="720">
 
 </div>
 
 ktrs is a native replacement for [ktfmt](https://github.com/facebook/ktfmt) and
-[ktlint](https://github.com/pinterest/ktlint). It produces the same output, it is 13-190x faster, and
-it ships as small native binaries with no runtime.
+[ktlint](https://github.com/pinterest/ktlint). It produces the same output and ships as small binaries
+with no runtime. Try the formatter in the **[playground](https://hexay.github.io/ktrs/)**, which runs it
+as WebAssembly.
 
-- ⚡ **Fast.** Under 10 ms per file in an editor or pre-commit hook, against roughly a second of JVM
-  startup. On whole projects it uses every core and is still at least 13x faster.
+- ⚡ **Fast.** 10-200x faster than the jars and 2-16x faster than ktfmt's GraalVM native image
+  ([Performance](#performance)).
 - 🎯 **Identical output.** Byte-identical to ktfmt 0.65 on 6,121 of 6,123 real-world files (both
   tools reject the other two). Lint violations and `--format` output match ktlint 2.0 in all three
-  code styles, and ktlint 1.8 in a compatibility mode.
+  code styles, and ktlint 1.8 in a compatibility mode ([How we test](#how-we-test)).
 - 🔌 **Drop-in.** The `ktfmt` and `ktlint` binaries accept the originals' flags, messages and exit
   codes, so existing scripts, hooks and CI keep working.
-- 🧩 **Fits your setup.** Integrations for GitHub Actions, pre-commit, Spotless, ktfmt-gradle,
-  ktlint-gradle and kotlinter drop-in plugins, and Neovim, Helix, Zed, Emacs, VS Code and IntelliJ/Android Studio.
-- 🌳 **Built on a faithful parser.** ktrs includes a lossless Kotlin parser whose tree matches the
-  Kotlin compiler's PSI node for node.
-
-Try the formatter in your browser in the **[playground](https://hexay.github.io/ktrs/)**, which runs
-it as WebAssembly.
+- 🧩 **Fits your setup.** [GitHub Actions](#github-actions), [pre-commit](#pre-commit),
+  [editors](#editors), [Gradle](#gradle), [Maven](#maven),
+  [Bazel, reviewdog and Danger](docs/ci-integrations.md).
+- 🌳 **Built on a faithful parser.** The lossless Kotlin parser's tree matches the compiler's PSI node
+  for node, and [you can use it as a library](#use-the-parser-as-a-library).
 
 ## Installation
 
@@ -99,17 +98,88 @@ runs natively with output identical to the jar (the `-all.jar` and the Maven art
 rule set or reporter jar hands the whole run to the real ktlint jar (downloaded once and checked by
 SHA-256; needs Java), so it works at JVM speed ([research/27](research/27-custom-rulesets-impl.md)).
 
+**ktfmt version.** ktrs formats exactly like ktfmt 0.65, everywhere: the binaries, the Gradle and
+Maven integrations and the editor support. Tools that bundle an older ktfmt (ktfmt-gradle 0.27.0 and
+Spotless's default are on 0.64) therefore format slightly differently from ktrs: switching to ktrs
+shows the same one-time diff as upgrading ktfmt to 0.65 (for example, a trailing comma after a single
+argument that sits on its own line).
+
 **Limits.**
 
 - The `ktfmt` binary parses with Kotlin 2.4.21's grammar; ktfmt 0.65 is built on Kotlin 2.4.10, so
   syntax newer than that is accepted here and rejected there.
 - ktfmt's undocumented `--experimental-engine` flag is rejected.
 
-**ktfmt version.** ktrs formats exactly like ktfmt 0.65, everywhere: the binaries, the Gradle and
-Maven integrations and the editor support. Tools that bundle an older ktfmt (ktfmt-gradle 0.27.0 and
-Spotless's default are on 0.64) therefore format slightly differently from ktrs: switching to ktrs
-shows the same one-time diff as upgrading ktfmt to 0.65 (for example, a trailing comma after a single
-argument that sits on its own line).
+## Performance
+
+Each tool runs from the command line with the same flags and files. Times are the median wall time of 5
+runs of a **fresh process**, on one Linux machine (Ryzen 7 9700X, 16 CPUs, JDK 21).
+
+**JVM warm-up is included.** Every run starts a new JVM, so jar times include startup, class loading and
+a cold JIT, which is what a CLI, hook or CI step pays. The last table shows the jars fully warmed up.
+
+ktfmt is compared as both the jar and its official GraalVM native image, the binary ktfmt publishes with each release:
+
+| ktfmt 0.65 | ktrs | GraalVM | Jar | vs GraalVM | vs jar |
+|---|--:|--:|--:|--:|--:|
+| Editor: one 8 KB file on stdin | <5 ms | 7.1 ms | 376 ms | **~5x** | **>70x** |
+| Pre-commit: 10 changed files | <5 ms | 6.4 ms | 365 ms | **~2x** | **>70x** |
+| Format okhttp (617 files) | 73 ms | 1.13 s | 1.74 s | **16x** | **24x** |
+| Format okhttp, 1 core | 250 ms | 2.48 s | 6.81 s | **10x** | **27x** |
+| Format 7 projects (6,123 files) | 298 ms | 4.68 s | 4.70 s | **16x** | **16x** |
+
+| ktlint | ktrs | Jar | vs jar |
+|---|--:|--:|--:|
+| 2.0: lint one file | <5 ms | 402 ms | **>80x** |
+| 2.0: lint okhttp | 119 ms | 4.41 s | **37x** |
+| 2.0: lint 7 projects | 640 ms | 19.65 s | **31x** |
+| 2.0: autocorrect okhttp (`-F`) | 219 ms | 42.73 s | **195x** |
+| 1.8 mode: lint okhttp | 220 ms | 3.25 s | **15x** |
+| 1.8 mode: lint 7 projects | 1.29 s | 13.05 s | **10x** |
+
+ktlint has no GraalVM column because its 2.0.0-ALPHA-4 Linux native image crashes on every lint or format.
+
+| Jars warmed up, okhttp | ktrs | Jar, fresh process | Jar, warmed up | vs warmed up |
+|---|--:|--:|--:|--:|
+| Format | 73 ms | 1.74 s | 276 ms | **4x** |
+| Lint (2.0) | 119 ms | 4.41 s | 2.96 s | **25x** |
+
+"Warmed up" is the median of the last 5 of 30 runs inside one JVM. Command-line users never get this; a
+long-lived process can approach it.
+
+Every scenario, memory use, Spotless numbers, the method and how to reproduce it all:
+**[docs/performance.md](docs/performance.md)**.
+
+## How we test
+
+Parity with the original tools is the spec: ktrs runs next to the real jars, and a difference fails the gate unless
+it is on a reviewed list in [`tools/parity/known-diffs/`](tools/parity/known-diffs/). A release can't be tagged
+without a passing parity run on its commit.
+
+| What | Compared with | On | When |
+|---|---|---|---|
+| Unit and ported upstream tests (ktfmt's suite, ktlint's rule tests) | Upstream's expected results | Linux, macOS, Windows | Every push and PR |
+| Parser | Kotlin compiler's PSI tree (`DebugUtil.psiToString`) | Compiler's fixtures, every corpus file | Fixtures every push, corpus nightly |
+| Formatter | ktfmt jar, byte for byte | Corpus in meta, google and kotlinlang styles | Nightly |
+| Linter | ktlint jar: violations and `--format` output | Corpus in `ktlint_official`, `intellij_idea`, `android_studio`, with and without experimental rules | Nightly |
+| ktlint 1.8 mode, compose-rules | Their jars | Corpus | Nightly |
+| CLIs | Jars: stdout, stderr, exit code, written files | Scenario suite, including editor invocations | Nightly |
+| Gradle and Maven drop-ins | The original plugins | Fixture builds | Nightly |
+| Held-out corpus | Same as the formatter, linter and CLIs | 15,287 files from 20 other projects, which never drove a fix | On demand |
+| Fuzzing | Jars, plus crash and hang checks | Mutated real-world files | On demand |
+
+The **corpus** is ~6,000 files from 7 projects, pinned in [`tools/corpus/REVISIONS`](tools/corpus/REVISIONS). The
+[nightly parity run](https://github.com/Hexay/ktrs/actions/workflows/parity.yml) is public, and a weekly workflow opens
+an issue when ktfmt, ktlint, compose-rules or Kotlin publishes a newer release.
+
+- **Held-out corpus.** It checks that corpus work didn't overfit. In its first run, all 2.2M lint violations and
+  every ktfmt output matched in all three styles, and `--format` differed on 3 files from one rule, since fixed
+  ([research/21](research/21-holdout.md); `tools/holdout/run.sh`).
+- **Fuzzing.** The first runs found 4 bugs, now fixed, including exponential parser memory on deeply nested
+  generic-looking input ([research/24](research/24-fuzzing.md); `fuzz/`, `tools/fuzz/diff.sh`).
+
+Run them yourself: `cargo test`, then `cargo corpus-diff`, `cargo fmt-diff` and `cargo lint-diff`. The full list of
+gates is in [`CLAUDE.md`](CLAUDE.md).
 
 ## Integrations
 
@@ -181,14 +251,17 @@ No Rust needed: on first run, the hook downloads the release binaries for its `r
 ### Editors
 
 `ktrs lsp` is a language server for ktlint diagnostics, quick fixes and ktfmt or ktlint formatting.
-It runs next to your Kotlin language server and takes its setup from the Gradle or Maven build. In VS
-Code, install the `hexay.ktrs` extension, which bundles it. In IntelliJ IDEA 2025.3+ and Android
-Studio, install the `ktrs` plugin (`io.github.hexay.ktrs`, also bundling it; the IDEs without
-the platform LSP client need LSP4IJ), or the release's `ktrs-intellij-<version>.zip` from disk. Editor
-plugins that already run `ktlint` or `ktfmt` (conform.nvim, nvim-lint, none-ls, ALE, apheleia,
-flycheck-kotlin, Helix, Zed, VS Code's mskelton.ktlint, Block's IntelliJ Kotlin Formatter) work
-unchanged with the drop-in binaries; their exact invocations are diffed against the jars. Configs for
-both: [docs/editors.md](docs/editors.md).
+It runs next to your Kotlin language server and takes its setup from the Gradle or Maven build.
+
+- **VS Code:** install the `hexay.ktrs` extension, which bundles it.
+- **IntelliJ IDEA 2025.3+ and Android Studio:** install the `ktrs` plugin (`io.github.hexay.ktrs`, also
+  bundling it; the IDEs without the platform LSP client need LSP4IJ), or the release's
+  `ktrs-intellij-<version>.zip` from disk.
+- **Plugins that already run `ktlint` or `ktfmt`** (conform.nvim, nvim-lint, none-ls, ALE, apheleia,
+  flycheck-kotlin, Helix, Zed, VS Code's mskelton.ktlint, Block's IntelliJ Kotlin Formatter) work unchanged
+  with the drop-in binaries; their exact invocations are diffed against the jars.
+
+Configs for all of these: [docs/editors.md](docs/editors.md).
 
 ### Gradle
 
@@ -322,101 +395,11 @@ Output is that of ktfmt 0.65 and identical to stock `<ktlint>` 1.8.0 (`tools/spo
 `<version>` must be left out or match (ktfmt `0.65`; ktlint `1.8.0` or `2.0.0-ALPHA-4`). Stock
 `<ktfmt>` without a `<version>` runs Spotless's default, 0.64: the swap then also is the upgrade to 0.65.
 
-### Bazel
+### Bazel, reviewdog and Danger
 
-[rules_lint](https://github.com/aspect-build/rules_lint) 2.9.1 takes the binaries where it takes the
-jars (checked on Bazel 8). Each release has a [rules_multitool](https://github.com/bazel-contrib/rules_multitool) lockfile
-for `ktrs`, `ktfmt` and `ktlint` on all six platforms, `ktrs-<tag>.multitool.lock.json`; save it as
-`ktrs.lock.json` at the workspace root:
-
-```python
-# MODULE.bazel
-bazel_dep(name = "aspect_rules_lint", version = "2.9.1")
-bazel_dep(name = "rules_multitool", version = "1.11.1")
-
-multitool = use_extension("@rules_multitool//multitool:extension.bzl", "multitool")
-multitool.hub(lockfile = "//:ktrs.lock.json")
-use_repo(multitool, "multitool")
-```
-
-```python
-# tools/format/BUILD.bazel: `bazel run //tools/format` rewrites, `bazel run //tools/format:format.check` checks
-load("@aspect_rules_lint//format:defs.bzl", "format_multirun")
-
-format_multirun(
-    name = "format",
-    kotlin = "@multitool//tools/ktfmt",
-    kotlin_check_args = ["--kotlinlang-style", "--set-exit-if-changed", "--dry-run"],
-    kotlin_fix_args = ["--kotlinlang-style"],
-)
-```
-
-```python
-# tools/lint/linters.bzl
-load("@aspect_rules_lint//lint:ktlint.bzl", "lint_ktlint_aspect")
-load("@aspect_rules_lint//lint:lint_test.bzl", "lint_test")
-
-ktlint = lint_ktlint_aspect(
-    binary = Label("@multitool//tools/ktlint"),
-    editorconfig = Label("//:.editorconfig"),
-    baseline_file = Label("//:ktlint-baseline.xml"),   # required by rules_lint; may hold no entries
-    args = ["--log-level=none"],                       # ktlint logs to stdout, which is the report
-)
-
-ktlint_test = lint_test(aspect = ktlint)               # ktlint_test(name = ..., srcs = [":lib"]) for `bazel test`
-```
-
-```sh
-bazel build //... --aspects=//tools/lint:linters.bzl%ktlint --output_groups=rules_lint_human
-```
-
-- The lint action sees only what Bazel declares: the target's sources and the one `editorconfig`
-  file. Nested `.editorconfig` files are not applied. Give the root one `root = true`, or ktlint
-  keeps looking above Bazel's output directory and can pick up a stray file there.
-- It needs Bazel's sandbox. With `--spawn_strategy=local` ktlint finds no files and the target passes.
-- rules_lint's aspect still asks for a JDK, which the binary never starts. A machine without Java needs
-  `--java_runtime_version=remotejdk_21`.
-- rules_kotlin's own `ktlint_test` and `ktlint_fix` take no binary, so they still run the jar.
-
-A complete workspace, run in CI: [bazel/e2e/rules_lint](bazel/e2e/rules_lint).
-
-### reviewdog and Danger
-
-[reviewdog](https://github.com/reviewdog/reviewdog) posts violations as review comments on the
-changed lines, and fixes as suggested changes. It reads the `ktlint` binary's checkstyle report, or
-a diff:
-
-```yaml
-- uses: reviewdog/action-setup@v1
-- name: Violations as review comments
-  env:
-    REVIEWDOG_GITHUB_API_TOKEN: ${{ github.token }}
-  run: |
-    ktlint --relative --reporter=checkstyle,output=ktlint.xml || true
-    reviewdog -f=checkstyle -name=ktlint -reporter=github-pr-review -filter-mode=added < ktlint.xml
-```
-
-```yaml
-- run: ktlint -F || true          # or: ktfmt --kotlinlang-style src/
-- uses: reviewdog/action-suggester@v1   # turns the working tree's diff into suggested changes
-  with:
-    tool_name: ktlint
-```
-
-`ktrs lint --reporter checkstyle` gives the same report. For `-f=sarif`, leave out `--relative`:
-ktlint's SARIF report declares its paths as relative to the home directory, so with `--relative`
-reviewdog matches none of them.
-
-[Danger](https://danger.systems) plugins work unchanged:
-
-- [danger-ktlint](https://github.com/mataku/danger-ktlint) (Ruby) runs `ktlint <changed files>
-  --reporter=json --relative --log-level=none` from `PATH`, so the binary only has to be there. With
-  `ktlint.skip_lint = true` it reads `ktlint.report_file`, written by
-  `ktlint --relative --reporter=json,output=ktlint.json`.
-- [ktlint-danger-kotlin](https://github.com/Bastosss77/ktlint-danger-kotlin) parses a report file and
-  picks the parser by extension: `--reporter=json,output=ktlint.json`,
-  `--reporter=checkstyle,output=ktlint.xml` or `--reporter=sarif,output=ktlint.sarif`.
-- Checkstyle plugins (danger-checkstyle_format, danger-plugin-lint-report) read the `ktlint.xml` above.
+The binaries work with [rules_lint](https://github.com/aspect-build/rules_lint),
+[reviewdog](https://github.com/reviewdog/reviewdog) and [Danger](https://danger.systems) plugins. Setup:
+[docs/ci-integrations.md](docs/ci-integrations.md).
 
 ## Use the parser as a library
 
@@ -444,104 +427,13 @@ assert_eq!(file.apply_edits(edits).unwrap(), "fun old() = 1\nval x = new()\n");
 and can change in any release. More in the crate's [README](crates/kt-syntax/README.md), with two
 runnable examples: a lint (`examples/missing_kdoc.rs`) and a codemod (`examples/rename_call.rs`).
 
-## Performance
-
-Each tool is run from the command line the way users run it: same flags, same files, identical
-output. Timings are wall time, the median of 5 runs after a warm-up, measured with
-[hyperfine](https://github.com/sharkdp/hyperfine) on Linux (Xeon E-2136, 10 CPUs, JDK 21).
-
-**Formatting**, the `ktfmt` binary against the ktfmt 0.64 jar:
-
-| Scenario | ktrs | ktfmt 0.64 | Speedup |
-|---|--:|--:|--:|
-| Editor: one 8 KB file on stdin | <5 ms | 791 ms | **>150x** |
-| Pre-commit: 10 changed files | 16 ms | 743 ms | **47x** |
-| CI check on okhttp (617 files) | 183 ms | 3.87 s | **21x** |
-| Format okhttp in place | 176 ms | 3.30 s | **19x** |
-| Format okhttp in place, 1 core | 505 ms | 12.46 s | **25x** |
-| Format 7 projects (6,123 files, 31 MB) | 813 ms | 10.91 s | **13x** |
-
-**Linting**, the `ktlint` binary against the ktlint 2.0.0-ALPHA-4 jar:
-
-| Scenario | ktrs | ktlint 2.0 | Speedup |
-|---|--:|--:|--:|
-| Editor: one 8 KB file on stdin | <10 ms | 1.06 s | **>100x** |
-| Lint one file | <10 ms | 845 ms | **>80x** |
-| Lint okhttp (617 files) | 344 ms | 11.56 s | **34x** |
-| Autocorrect okhttp (`-F`) | 640 ms | 123.0 s | **192x** |
-| Lint okhttp, 1 core | 1.37 s · 49 MB | 39.36 s · 366 MB | **29x** |
-| Lint 7 projects (6,123 files) | 1.72 s · 268 MB | 49.73 s · 553 MB | **29x** |
-| Autocorrect 7 projects (`-F`) | 4.00 s | 338.9 s | **85x** |
-
-The ktlint 1.8.0 jar is 10-30% faster than 2.0 on these runs. ktrs's 1.8 mode visits the tree once
-per rule, as 1.8 does, and is up to 2x slower than its 2.0 mode.
-
-JVM startup dominates small runs. On large runs ktrs is still several times faster per core, and it
-uses every core. The binary is a few MB with no runtime, compared with a 71 MB jar plus a JRE.
-
-<details>
-<summary>Methodology and Spotless numbers</summary>
-
-- **Corpus.** The 7 projects are okhttp, kotlinx.coroutines, nowinandroid, ktlint, ktfmt, Exposed
-  and ktor, pinned in [`tools/bench/REVISIONS`](tools/bench/REVISIONS).
-- **1 core.** Both processes are pinned to one CPU from launch. The JVM then sizes its GC and JIT
-  threads for one CPU, as it would in a 1-CPU container, and its JIT competes with the work.
-- **Identical output.** ktfmt rejects 2 of the 6,123 files, Exposed's `{{packageName}}`
-  code-generator templates, and ktrs rejects them with the same error.
-- **Reproduce.** `tools/bench/public.sh` (Linux or macOS; needs hyperfine, Java and a
-  `cargo build --profile dist`) fetches the corpus, downloads the jars and checks their SHA-256, and
-  runs every scenario above; `--only quick` runs a subset. The `bench` workflow runs it on a GitHub
-  runner for each release tag or on demand. Method, noise and the ktlint 1.8 figures are in
-  [research/23](research/23-public-bench.md).
-
-**Spotless.** `spotlessApply` on okhttp's 573 files gives identical output. The figures are the
-formatter's share, after subtracting a Spotless run that only trims whitespace:
-
-| Spotless step | ktrs (`KtrsStep`) | ktfmt 0.64 (`ktfmt()`) |
-|---|--:|--:|
-| Fresh Gradle daemon, as in CI | ~4 s | ~52 s |
-| Warm daemon, repeated runs | ~2 s | ~6 s |
-
-</details>
-
-## How correctness is checked
-
-Parity with the original tools is the spec. The ported test suites run in CI, and the corpus diffs
-(`cargo corpus-diff`, `cargo fmt-diff`, `cargo lint-diff`) compare against the real tools on ~6,000
-files:
-
-- **Parser.** The tree must match the Kotlin compiler's PSI (`DebugUtil.psiToString`) on the
-  compiler's own test fixtures and on every corpus file.
-- **Formatter.** ktfmt's test suite is ported. The output is also diffed byte for byte against the
-  ktfmt jar on the corpus in the meta, google and kotlinlang styles.
-- **Linter.** ktlint's rule tests are ported. Violations and `--format` output are diffed against
-  the ktlint jar on the corpus in the `ktlint_official`, `intellij_idea` and `android_studio` code
-  styles, with and without experimental rules.
-- **CLIs.** The `ktfmt` and `ktlint` binaries are compared with the jars on stdout, stderr, exit
-  code and written files across a scenario suite.
-- **Held-out corpus.** To check that the corpus work didn't overfit, the CLIs also run against a
-  second corpus that never drove a fix. It has 15,287 files from 20 other projects, pinned in
-  [`tools/holdout/REVISIONS`](tools/holdout/REVISIONS). In the first run:
-  - All 2.2M lint violations matched ktlint in all three styles.
-  - ktfmt output matched on every file in all three styles.
-  - `--format` output differed on 3 files, from one rule. That bug is now fixed.
-
-  Details are in [research/21](research/21-holdout.md); `tools/holdout/run.sh` reruns it. The
-  ktlint 1.8 mode and compose-rules are checked against their jars on both corpora too.
-- **Fuzzing.** `fuzz/` has cargo-fuzz targets for the parser, ktfmt and ktlint, and
-  `tools/fuzz/diff.sh` runs mutated real-world files through the binaries and the jars and reports
-  any difference. The first runs found 4 bugs, now fixed, including exponential parser memory on
-  deeply nested generic-looking input ([research/24](research/24-fuzzing.md)).
-- **Upstream releases.** A weekly workflow opens an issue when ktfmt, ktlint, compose-rules or
-  Kotlin publishes a release newer than the pinned version.
-
 ## Maintenance
 
 ktrs is maintained by [@Hexay](https://github.com/Hexay). It tracks ktfmt 0.65, ktlint
-2.0.0-ALPHA-4 (plus 1.8.0 in compatibility mode), compose-rules 0.6.8 and the Kotlin 2.4.21 parser. New upstream releases are ported and re-checked against
-the parity gates before a ktrs release. If ktrs output ever differs from ktfmt or ktlint on your
-code, that's a bug: please [open an issue](https://github.com/Hexay/ktrs/issues) with the file, or
-a snippet that reproduces it, and the command line you used.
+2.0.0-ALPHA-4 (plus 1.8.0 in compatibility mode), compose-rules 0.6.8 and the Kotlin 2.4.21 parser. New upstream
+releases are ported and re-checked against the parity gates before a ktrs release. If ktrs output ever differs from
+ktfmt or ktlint on your code, that's a bug: please [open an issue](https://github.com/Hexay/ktrs/issues) with the
+file, or a snippet that reproduces it, and the command line you used.
 
 ## Contributing
 
