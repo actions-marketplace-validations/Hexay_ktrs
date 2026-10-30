@@ -28,9 +28,10 @@ work. Absolute times are only comparable within this page.
 
 ## Formatting: ktfmt 0.65
 
-"GraalVM" is the native image ktfmt publishes with each release (built with GraalVM CE 25.2.4).
+"GraalVM" is the native image ktfmt publishes with each release, built with GraalVM CE 25.2.4, so without PGO. "JVM" is
+the release jar on a stock JDK.
 
-| Scenario | ktrs | GraalVM | Jar | vs GraalVM | vs jar |
+| Scenario | ktrs | ktfmt (GraalVM) | ktfmt (JVM) | ktrs vs GraalVM | ktrs vs JVM |
 |---|--:|--:|--:|--:|--:|
 | Editor: one 8 KB file on stdin | <5 ms | 7.1 ms | 376 ms | **~5x** | **>70x** |
 | Pre-commit: 10 changed files | <5 ms | 6.4 ms | 365 ms | **~2x** | **>70x** |
@@ -39,8 +40,9 @@ work. Absolute times are only comparable within this page.
 | Format okhttp in place, 1 core | 250 ms | 2.48 s | 6.81 s | **10x** | **27x** |
 | Format 7 projects (6,123 files) | 298 ms | 4.68 s | 4.70 s | **16x** | **16x** |
 
-| Max RSS | ktrs | GraalVM | Jar |
+| Max RSS | ktrs | ktfmt (GraalVM) | ktfmt (JVM) |
 |---|--:|--:|--:|
+| One 8 KB file on stdin | 18 MB | 36 MB | 154 MB |
 | Format okhttp in place | 514 MB | 356 MB | 1,145 MB |
 | Format okhttp in place, 1 core | 98 MB | 186 MB | 269 MB |
 | Format 7 projects | 611 MB | 936 MB | 1,709 MB |
@@ -52,7 +54,7 @@ run grows and is gone at 6,123 files. ktrs uses more memory than the native imag
 
 ktrs's default mode against the 2.0.0-ALPHA-4 jar:
 
-| Scenario | ktrs | Jar | vs jar |
+| Scenario | ktrs | ktlint (JVM) | ktrs speedup |
 |---|--:|--:|--:|
 | Editor: one 8 KB file on stdin | <5 ms | 507 ms | **>100x** |
 | Lint one file | <5 ms | 402 ms | **>80x** |
@@ -65,14 +67,32 @@ ktrs's default mode against the 2.0.0-ALPHA-4 jar:
 ktrs's 1.8 mode (`--ktlint-version=1.8`) against the 1.8.0 jar. It visits the tree once per rule, as 1.8 does, so it
 is about 2x slower than the default mode, while the 1.8.0 jar is faster than the 2.0 jar:
 
-| Scenario | ktrs, 1.8 mode | 1.8.0 jar | vs jar |
+| Scenario | ktrs, 1.8 mode | ktlint 1.8.0 (JVM) | ktrs speedup |
 |---|--:|--:|--:|
 | Lint okhttp (617 files) | 220 ms | 3.25 s | **15x** |
 | Lint 7 projects (6,123 files) | 1.29 s | 13.05 s | **10x** |
 
 **No GraalVM column.** ktlint's 2.0.0-ALPHA-4 `ktlint_linux-x86-64` binary crashes on every lint or format
 (`Could not find 'theUnsafe' field in the Unsafe class`). `public.sh` checks for this and adds the column once a pinned
-binary works. The macOS and Windows binaries were not tested.
+binary works. The macOS and Windows binaries were not tested. This is the published build, not a limit of GraalVM:
+others report working ktlint native images.
+
+## GraalVM with PGO: not measured
+
+Profile-guided optimization should make a native image faster and smaller than the figures above, and needs Oracle GraalVM.
+We tried to build both tools with it on this machine, under an 8 GB limit per job, and got no working binary
+([research/37](../research/37-native-image-bench.md)). A community experiment reports 15-30% better performance and a
+binary about half the size; we have not reproduced that. Treat the GraalVM column as the published build, not GraalVM's
+best case.
+
+## Binary size
+
+| Tool | ktrs | GraalVM, published | Jar |
+|---|--:|--:|--:|
+| ktfmt | 1.6 MB | 56.5 MB | 71.5 MB, plus a JRE |
+| ktlint | 4.3 MB | 62.3 MB (crashes) | 75.4 MB, plus a JRE |
+
+The `ktrs` binary, with both tools and the language server, is 6.5 MB.
 
 ## Warmed-up JVM
 
@@ -80,7 +100,7 @@ The jars' best case. `tools/bench/jvm-warm.sh` calls each CLI's `main()` 30 time
 the last 5, so there is no startup and the JIT is trained. No command-line user gets this speed; a long-lived process
 can approach it.
 
-| okhttp (617 files) | ktrs | Jar, fresh process | Jar, warmed up | vs warmed up |
+| okhttp (617 files) | ktrs | JVM, fresh process | JVM, warmed up | ktrs vs warmed up |
 |---|--:|--:|--:|--:|
 | Format in place | 73 ms | 1.74 s | 276 ms | **4x** |
 | Lint | 119 ms | 4.41 s | 2.96 s | **25x** |

@@ -32,7 +32,7 @@ class KtrsSpotlessMavenFieldsTest {
 
     /**
      * Without {@code <version>}, stock Spotless runs its default releases. ktlint's is the one ktrs matches; ktfmt's is
-     * still 0.64 while ktrs formats as 0.65 (README "Integrations"): when this fails, Spotless caught up.
+     * still 0.64 while ktrs formats as 0.65 (docs/build-tools.md): when this fails, Spotless caught up.
      */
     @Test
     void defaultVersionsAreSpotlessDefaults() {

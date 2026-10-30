@@ -1,12 +1,12 @@
-//! What each drop-in replaces (README "Integrations"), and where notes send users.
+//! What each drop-in replaces (docs/build-tools.md), and where notes send users.
 
 pub(crate) const GRADLE_PLUGIN_ARTIFACT: &str = "io.github.hexay:ktrs-gradle-plugin";
 /// The `io.github.hexay:ktrs` jar: Spotless steps (Gradle classpath, Maven plugin dependency).
 pub(crate) const JAR_GROUP: &str = "io.github.hexay";
 pub(crate) const JAR_ARTIFACT: &str = "ktrs";
 
-pub(crate) const README_GRADLE: &str = "see README \"Integrations > Gradle\"";
-pub(crate) const README_MAVEN: &str = "see README \"Integrations > Maven\"";
+pub(crate) const DOCS_GRADLE: &str = "see https://github.com/Hexay/ktrs/blob/master/docs/build-tools.md#gradle";
+pub(crate) const DOCS_MAVEN: &str = "see https://github.com/Hexay/ktrs/blob/master/docs/build-tools.md#maven";
 pub(crate) const README_DROP_IN: &str = "see README \"Drop-in for ktfmt and ktlint\"";
 
 pub(crate) struct PluginSwap {

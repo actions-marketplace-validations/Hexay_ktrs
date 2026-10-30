@@ -1,4 +1,4 @@
-//! Maven (README "Integrations > Maven"): gantsign's ktlint-maven-plugin -> `io.github.hexay:
+//! Maven (docs/build-tools.md): gantsign's ktlint-maven-plugin -> `io.github.hexay:
 //! ktrs-ktlint-maven-plugin`; Spotless `<kotlin>` `<ktfmt>`/`<ktlint>` get `implementation=` and the plugin the
 //! `io.github.hexay:ktrs` dependency.
 
