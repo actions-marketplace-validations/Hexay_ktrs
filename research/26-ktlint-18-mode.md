@@ -56,8 +56,14 @@ Phase 1 makes ktrs reproduce **1.8.0's lint rows and CLI behaviour** on request;
 | E-c | `disabled_rules` / `ktlint_disabled_rules` in `.editorconfig`: a WARN per file (`RuleExecutionContext`) | `create.rs` |
 | E-d | rule exception text names the file, not its path (#3355); standard rules' `About` URLs are pinterest's | `create.rs`, `process.rs` |
 
-Not switched, on purpose: the KDoc trailing-space branch of no-trailing-spaces (d3adc18f) compensates for the newer
-KDoc lexer that ktrs shares with 2.0, so it stays on in 1.8 mode; positional destructuring (#3365) only parses with the
+Newer KDoc lexer: ktrs shares Kotlin 2.4's KDoc lexer with 2.0; 1.8.0 ran Kotlin 2.2, which had no inline code-span
+state (`CODE_SPAN_TEXT` arrived between 2.2 and 2.4). The no-trailing-spaces KDoc trailing-space branch (d3adc18f)
+compensates for that lexer, so it stays on in 1.8 mode. **comma-spacing** needs the inverse compensation: a KDoc inline
+code span of exactly `` `,` `` becomes a lone `,` leaf under the newer lexer and is flagged, but 1.8.0 kept it inside
+`KDOC_TEXT` (issue #9), so 1.8 mode skips a comma whose element type is `KDOC_CODE_SPAN_TEXT`
+(`spacing_around_comma_rule.rs`; fixture `X6KdocCodeSpanComma.kt`).
+
+Not switched, on purpose: positional destructuring (#3365) only parses with the
 2.4 grammar; package-name's regex change is unobservable (underscores are reported first); format-only changes
 (comment-spacing rewrite, when-entry-bracing #3261, `VisitorModifier`s) are phase 2.
 
@@ -131,7 +137,10 @@ say "run in debug mode"; the obsolete-property warning; four small rule fixes (X
 ## How to run
 
 - Tests: `cargo test -p ktrs-lint --release --test ktlint_1_8_mode` (one fixture per switch in
-  `crates/ktrs-lint/tests/data/ktlint_1_8_mode/`, expected rows from both jars), `--test ktlint_1_8_format` (rule order,
+  `crates/ktrs-lint/tests/data/ktlint_1_8_mode/`, expected rows from both jars; `X7KdocCodeSpanLexer.kt` stresses the
+  KDoc inline-code-span lexer surface — lone punctuation spans, interior commas, operator spans — the class issue #9
+  came from. KDoc *trailing-space* shapes are deliberately left out: they are the opposite, still-unfixed divergence
+  under "Remaining differences" / `known-diffs/ktlint-1.8.tsv`, so a fixture would fail), `--test ktlint_1_8_format` (rule order,
   `RunAfterRuleFilter`, when-entry-bracing in both modes), `cargo test -p ktrs-cli --test ktlint_cli_1_8`,
   `--test ktlint_baseline`, and `java_printf`'s unit test.
 - Lint rows and `-F` trees vs the jar (testbox, background, under the bench lock; `NO_FORMAT=1` for rows only):
