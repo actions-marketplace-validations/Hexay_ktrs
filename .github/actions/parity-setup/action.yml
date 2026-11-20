@@ -7,12 +7,23 @@ inputs:
 runs:
   using: composite
   steps:
+    # Every tools/ download (jars, Maven, JDK) retries: Maven Central returns transient HTTP errors for minutes at a time.
+    - shell: bash
+      run: printf 'retry = 8\nretry-all-errors\nshow-error\n' > ~/.curlrc
     - uses: actions/setup-java@v4
       with: { distribution: temurin, java-version: 21 }
     - uses: actions/cache/restore@v4
       with:
         path: corpus
         key: corpus-${{ hashFiles('tools/corpus/REVISIONS') }}
+        fail-on-cache-miss: true
+    - uses: actions/cache/restore@v4
+      with:
+        path: |
+          tools/ktlint-oracle/lib
+          tools/ktfmt-oracle/lib
+          tools/compose-rules/lib
+        key: jars-${{ hashFiles('tools/sync-ktlint.sh', 'tools/sync-ktfmt.sh', 'tools/sync-compose-rules.sh') }}-${{ env.KTLINT_18_URL }}
         fail-on-cache-miss: true
     - if: inputs.tree == 'true'
       shell: bash
